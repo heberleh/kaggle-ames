@@ -11,13 +11,16 @@ def variance_threshold_selector(df, threshold=0.0):
     return df[df.columns[selector.get_support(indices=True)]]
 
 
-def simple_imputer(df, cols=[], strategy=None):
+def simple_imputer(df, df_test, cols=[], strategy=None):
     df2 = df.copy()
     if len(cols) == 0:        
         cols = df2.columns    
     imputer = SimpleImputer(strategy=strategy)
     df2[cols] = imputer.fit_transform(df2[cols])
-    return df2
+
+    df_test2 = df_test.copy()
+    df_test2[cols] = imputer.transform(df_test2[cols])
+    return (df2, df_test2)
 
 
 from sklearn.feature_selection import SelectKBest, SelectFromModel

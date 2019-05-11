@@ -1,3 +1,4 @@
+#!/usr/bin/env python -W ignore::FutureWarning
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import ShuffleSplit, GridSearchCV
@@ -19,7 +20,7 @@ from pandas_sklearn import simple_imputer, variance_threshold_selector, select_k
 
 target_class = "SalePrice"
 cols_must_drop = ["Id"]
-log_transform = []#["SalePrice"]
+log_transform = ["SalePrice", "LotArea"]
 
 random_state = 2019
 np.random.RandomState(random_state)
@@ -51,7 +52,7 @@ X = home_data.copy()
 X.drop(['SalePrice'], axis=1, inplace=True)
 
 
-rs = ShuffleSplit(n_splits=1, train_size=0.9, test_size=.10, random_state=random_state)
+rs = ShuffleSplit(n_splits=1, train_size=0.1, test_size=0.1, random_state=random_state)
 rep = 0
 results = {}
 for train_index, test_index in rs.split(X):
@@ -66,6 +67,7 @@ for train_index, test_index in rs.split(X):
     y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
     X_val_rep = X_val.copy()
+    X_full = X.copy()
 
     # Get names of columns with too much missing values
     cols_with_missing = [col for col in X_train.columns
@@ -78,6 +80,7 @@ for train_index, test_index in rs.split(X):
     X_train.drop(cols_with_missing, axis=1, inplace=True)
     X_test.drop(cols_with_missing, axis=1, inplace=True)
     X_val_rep.drop(cols_with_missing, axis=1, inplace=True)
+    X_full.drop(cols_with_missing, axis=1, inplace=True)
 
     # "Cardinality" means the number of unique values in a column
     # Select categorical columns with relatively low cardinality (convenient but arbitrary)
@@ -94,20 +97,20 @@ for train_index, test_index in rs.split(X):
     X_train = X_train[my_cols].copy()    
     X_test = X_test[my_cols].copy()
     X_val_rep = X_val_rep[my_cols].copy()
+    X_full = X_full[my_cols].copy()
 
     # Preprocessing    
-    X_train = simple_imputer(df=X_train, cols=numerical_cols, strategy='mean')
-    X_test = simple_imputer(df=X_test, cols=numerical_cols, strategy='mean')
-    X_val_rep = simple_imputer(df=X_val_rep, cols=numerical_cols, strategy='mean')
+    X_train, X_test = simple_imputer(df=X_train, df_test=X_test, cols=numerical_cols, strategy='mean')    
+    X_full, X_val_rep = simple_imputer(df=X_full, df_test=X_val_rep, cols=numerical_cols, strategy='mean')
 
-    X_train = simple_imputer(df=X_train, cols=categorical_cols, strategy='most_frequent')
-    X_test = simple_imputer(df=X_test, cols=categorical_cols, strategy='most_frequent')
-    X_val_rep = simple_imputer(df=X_val_rep, cols=categorical_cols, strategy='most_frequent')
+    X_train, X_test = simple_imputer(df=X_train, df_test=X_test, cols=categorical_cols, strategy='most_frequent')    
+    X_full, X_val_rep = simple_imputer(df=X_full, df_test=X_val_rep, cols=categorical_cols, strategy='most_frequent')
 
     # OneHotEncoder
     X_train = pd.get_dummies(X_train, prefix_sep='_', drop_first=True)
     X_test = pd.get_dummies(X_test, prefix_sep='_', drop_first=True)
     X_val_rep = pd.get_dummies(X_val_rep, prefix_sep='_', drop_first=True)
+    X_full = pd.get_dummies(X_full, prefix_sep='_', drop_first=True)
 
     # Remove features with low variance
     cols_before_var = set(X_train.columns)
@@ -116,6 +119,7 @@ for train_index, test_index in rs.split(X):
     X_train = variance_threshold_selector(df=X_train, threshold=var_threshold)  #fit and transform
     X_test = X_test[X_train.columns]   # transform
     X_val_rep = X_val_rep[X_train.columns]
+    X_full = X_full[X_train.columns]
 
 
     # ==== Feature selection ====
@@ -124,9 +128,9 @@ for train_index, test_index in rs.split(X):
     from sklearn.feature_selection import f_regression, mutual_info_regression # for regression
 
     # f_regression
-    best20_f_regression = select_k_best(X_train, y_train, f_regression, 20)
+    best15_f_regression = select_k_best(X_train, y_train, f_regression, 15)
 
-    best20_mutual_info_regression = select_k_best(X_train, y_train, mutual_info_regression, 20)
+    best15_mutual_info_regression = select_k_best(X_train, y_train, mutual_info_regression, 15)
 
     # median_from_svr_linear = select_from_model(X_train, y_train, SVR(kernel="linear"), threshold='median')
     # median_from_svr_rbf = select_from_model(X_train, y_train, SVR(kernel="rbf"), threshold='median')
@@ -134,12 +138,12 @@ for train_index, test_index in rs.split(X):
 
     median_from_random_forest = select_from_model(X_train, y_train, RandomForestRegressor(n_estimators=128, random_state=random_state, n_jobs=8), threshold='median')
 
-    selected_features_intersection = set(best20_f_regression).intersection(
-        set(best20_mutual_info_regression)).intersection(
+    selected_features_intersection = set(best15_f_regression).intersection(
+        set(best15_mutual_info_regression)).intersection(
             set(median_from_random_forest))
     
-    selected_features_union = set(best20_f_regression).union(
-        set(best20_mutual_info_regression)).union(
+    selected_features_union = set(best15_f_regression).union(
+        set(best15_mutual_info_regression)).union(
             set(median_from_random_forest))
 
     # Various hyper-parameters to tune
@@ -147,36 +151,34 @@ for train_index, test_index in rs.split(X):
     parameters = {'nthread':[2], #when use hyperthread, xgboost may become slower
                 'objective':['reg:linear'],
                 'learning_rate': [.03, 0.05, .07], #so called `eta` value
-                'max_depth': [5, 6, 7],
+                'max_depth': [4, 7],
                 'min_child_weight': [4],
                 'silent': [1],
-                'booster': ['gbtree', 'gblinear', 'dart'],
+                'booster': ['gbtree'],
                 'subsample': [0.7],
                 'colsample_bytree': [0.7],
-                'n_estimators': [10]}#[512, 1024, 1536]}
+                'n_estimators': [1001]}
 
     xgb_grid_sel_f_i = GridSearchCV(xgb1,
                             parameters,
-                            cv = 5,
+                            cv = 4,
                             scoring = 'neg_mean_absolute_error',
                             n_jobs = 4,
                             verbose=False)
 
     xgb_grid_sel_f_u = GridSearchCV(xgb1,
                             parameters,
-                            cv = 5,
+                            cv = 4,
                             scoring = 'neg_mean_absolute_error',
                             n_jobs = 4,
                             verbose=False)
 
     xgb_grid = GridSearchCV(xgb1,
                             parameters,
-                            cv = 5,
+                            cv = 4,
                             scoring = 'neg_mean_absolute_error',
                             n_jobs = 4,
                             verbose=False)
-
-    # log y ... 
 
     # X_sel_var
     xgb_grid_sel_f_i.fit(X_train[selected_features_intersection], y_train)
@@ -185,27 +187,81 @@ for train_index, test_index in rs.split(X):
     # X_all_var
     xgb_grid.fit(X_train, y_train)
 
+    result = {
+        "intersection": {},
+        "union": {},
+        "all": {}
+    }
 
+    def test(grid, X_test, y_test):
+        result = {}
+        result["best_cv_score"] = abs(grid.best_score_)
+        result["mae_test"] = abs(mean_absolute_error(grid.predict(X_test), y_test))
+        result["performance"] = abs(result["best_cv_score"] - result["mae_test"])
+        result["variables"] = X_test.columns
+        result["best_parameters"] = grid.best_params_
+        return result
 
-    print("Selected features score u: ", xgb_grid_sel_f_u.best_score_)
-    print(xgb_grid.best_params_)
-    mae_u = mean_absolute_error(xgb_grid_sel_f_u.predict(X_test[selected_features_union]), y_test)
-    print("MAE test: ", mae_u)
-    print("Number of features: ", len(X_train[selected_features_union].columns))
+    def predict(X_full, y_full, X_val, parameters):
+            xgb = XGBRegressor()
+            xgb.set_params(**parameters)
+            xgb.fit(X_full, y_full)
+            return xgb.predict(X_val)
+
+    print("\n\n\n----------------------------------------------------")
+    print(rep)
+    print("\n\nintersection")
+    print(">>>> number of features ", len(selected_features_intersection))
+    result["intersection"] = test(xgb_grid_sel_f_i, X_test[selected_features_intersection], y_test)
+    result["intersection"]["prediction"] = predict(X_full[selected_features_intersection], 
+                                                    y, X_val_rep[selected_features_intersection], xgb_grid_sel_f_i.best_params_)
+
+    print("\n\nunion")
+    result["union"] = test(xgb_grid_sel_f_u, X_test[selected_features_union], y_test)
+    result["union"]["prediction"] = predict(X_full[selected_features_union], 
+                                                    y, X_val_rep[selected_features_union], xgb_grid_sel_f_u.best_params_)
+
+    print("\n\nall")
+    result["all"] = test(xgb_grid, X_test, y_test)
+    result["all"]["prediction"] = predict(X_full, y, X_val_rep, xgb_grid.best_params_)
     
+    results[rep] = result
 
-    print("Selected features score i: ", xgb_grid_sel_f_i.best_score_)
-    print(xgb_grid.best_params_)
-    mae_i = mean_absolute_error(xgb_grid_sel_f_i.predict(X_test[selected_features_intersection]), y_test)
-    print("MAE test: ", mae_u)
-    print("Number of features: ", len(X_train[selected_features_intersection].columns))
 
-    print("All features score: ", xgb_grid.best_score_)
-    print(xgb_grid.best_params_)
-    mae = mean_absolute_error(xgb_grid.predict(X_test), y_test)
-    print("MAE test: ", mae_u)
-    print("Number of features: ", len(X_train.columns))
+home_val = pd.read_csv("data/test.csv") #reintroduce Id
+min_error = 999999999999999999999
+selected_result = None
+for rep in results:
+    for type_selection in results[rep]:        
+        result = results[rep][type_selection]
+        if result["mae_test"] < min_error:
+            min_error = result["mae_test"]            
+            selected_result = result
 
-    print(xgb_grid.predict(X_val_rep))
+submission = pd.DataFrame()
+submission["Id"] = home_val["Id"]
 
+if len(log_transform) > 0:
+    submission["SalePrice"] = np.exp(selected_result["prediction"])
+else:
+    submission["SalePrice"] = selected_result["prediction"]
+submission.to_csv("submission.csv", index=False)
+
+
+final_variables = []
+for col in home_val.columns:
+    if col in selected_result["variables"]:
+        final_variables.append(col)
+pd.DataFrame(final_variables).to_csv("selected_variables.csv", index=False, header=False)
+
+
+import json
+with open('best_parameters.json', 'w') as file:
+     file.write(json.dumps(selected_result["best_parameters"])) # use `json.loads` to do the reverse
+
+for rep in results:
+    for type_selection in results[rep]:
+        result = results[rep][type_selection]
+        result["prediction"] = ""
+pd.DataFrame(results).to_csv("results.csv")
 
