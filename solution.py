@@ -19,7 +19,7 @@ from pandas_sklearn import simple_imputer, variance_threshold_selector, select_k
 
 target_class = "SalePrice"
 cols_must_drop = ["Id"]
-log_transform = ["SalePrice"]
+log_transform = []#["SalePrice"]
 
 random_state = 2019
 np.random.RandomState(random_state)
@@ -192,6 +192,7 @@ for train_index, test_index in rs.split(X):
     mae_u = mean_absolute_error(xgb_grid_sel_f_u.predict(X_test[selected_features_union]), y_test)
     print("MAE test: ", mae_u)
     print("Number of features: ", len(X_train[selected_features_union].columns))
+    
 
     print("Selected features score i: ", xgb_grid_sel_f_i.best_score_)
     print(xgb_grid.best_params_)
@@ -204,5 +205,7 @@ for train_index, test_index in rs.split(X):
     mae = mean_absolute_error(xgb_grid.predict(X_test), y_test)
     print("MAE test: ", mae_u)
     print("Number of features: ", len(X_train.columns))
+
+    print(xgb_grid.predict(X_val_rep))
 
 
