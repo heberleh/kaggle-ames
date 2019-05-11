@@ -1,12 +1,11 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import ShuffleSplit, GridSearchCV
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
-from pipeline import PipelineFeatureImportances
 from sklearn import feature_selection
 from sklearn import preprocessing
 from sklearn.model_selection import StratifiedKFold
@@ -14,15 +13,16 @@ from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import RFECV, VarianceThreshold
 from sklearn.svm import SVR
+from xgboost import XGBRegressor
 
-from pandas_sklearn import simple_imputer, variance_threshold_selector
+from pandas_sklearn import simple_imputer, variance_threshold_selector, select_k_best, select_from_model
 
 target_class = "SalePrice"
 cols_must_drop = ["Id"]
 log_transform = ["SalePrice"]
 
 random_state = 2019
-np.random.seed = random_state
+np.random.RandomState(random_state)
 
 home_data = pd.read_csv("data/train.csv")
 home_val = pd.read_csv("data/test.csv")
@@ -100,7 +100,7 @@ for train_index, test_index in rs.split(X):
     # OneHotEncoder
     X_train = pd.get_dummies(X_train, prefix_sep='_', drop_first=True)
     X_test = pd.get_dummies(X_test, prefix_sep='_', drop_first=True)
-        
+    
     # Remove features with low variance
     cols_before_var = set(X_train.columns)
     var_threshold = 0.05
@@ -110,4 +110,72 @@ for train_index, test_index in rs.split(X):
     print("Remaining: ", len(X_train.columns))
 
 
+    # ==== Feature selection ====
 
+    # BestK - univariate
+    from sklearn.feature_selection import f_regression, mutual_info_regression # for regression
+
+    # f_regression
+    best20_f_regression = select_k_best(X_train, y_train, f_regression, 20)
+
+    best20_mutual_info_regression = select_k_best(X_train, y_train, mutual_info_regression, 20)
+
+    # median_from_svr_linear = select_from_model(X_train, y_train, SVR(kernel="linear"), threshold='median')
+    # median_from_svr_rbf = select_from_model(X_train, y_train, SVR(kernel="rbf"), threshold='median')
+    # median_from_svr_poly = select_from_model(X_train, y_train, SVR(kernel="poly"), threshold='median')
+
+    median_from_random_forest = select_from_model(X_train, y_train, RandomForestRegressor(n_estimators=128, random_state=random_state, n_jobs=8), threshold='median')
+
+    selected_features_intersection = set(best20_f_regression).intersection(
+        set(best20_mutual_info_regression)).intersection(
+            set(median_from_random_forest))
+    
+    selected_features_union = set(best20_f_regression).union(
+        set(best20_mutual_info_regression)).union(
+            set(median_from_random_forest))
+
+    # Various hyper-parameters to tune
+    xgb1 = XGBRegressor()
+    parameters = {'nthread':[1], #when use hyperthread, xgboost may become slower
+                'objective':['reg:linear'],
+                'learning_rate': [.03, 0.05, .07], #so called `eta` value
+                'max_depth': [5, 6, 7],
+                'min_child_weight': [4],
+                'silent': [1],
+                'subsample': [0.7],
+                'colsample_bytree': [0.7],
+                'n_estimators': [128, 512]}
+
+    xgb_grid_sel_f_i = GridSearchCV(xgb1,
+                            parameters,
+                            cv = 5,
+                            n_jobs = 5,
+                            verbose=False)
+
+    xgb_grid_sel_f_u = GridSearchCV(xgb1,
+                            parameters,
+                            cv = 5,
+                            n_jobs = 5,
+                            verbose=False)
+
+    xgb_grid = GridSearchCV(xgb1,
+                            parameters,
+                            cv = 5,
+                            n_jobs = 4,
+                            verbose=False)
+
+    # X_sel_var
+    xgb_grid_sel_f_i.fit(X_train[selected_features_intersection], y_train)
+    xgb_grid_sel_f_u.fit(X_train[selected_features_union], y_train)
+
+    # X_all_var
+    xgb_grid.fit(X_train, y_train)
+
+    print("Selected features score u: ", xgb_grid_sel_f_u.best_score_)
+    print(xgb_grid.best_params_)
+
+    print("Selected features score i: ", xgb_grid_sel_f_i.best_score_)
+    print(xgb_grid.best_params_)
+
+    print("All features score: ", xgb_grid.best_score_)
+    print(xgb_grid.best_params_)
