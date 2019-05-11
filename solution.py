@@ -53,6 +53,7 @@ X.drop(['SalePrice'], axis=1, inplace=True)
 
 rs = ShuffleSplit(n_splits=1, train_size=0.9, test_size=.10, random_state=random_state)
 rep = 0
+results = {}
 for train_index, test_index in rs.split(X):
 
     print("--------- Rep ", rep, "---------")
@@ -64,6 +65,8 @@ for train_index, test_index in rs.split(X):
     X_train, X_test = X.iloc[train_index], X.iloc[test_index]
     y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
+    X_val_rep = X_val.copy()
+
     # Get names of columns with too much missing values
     cols_with_missing = [col for col in X_train.columns
                         if X_train[col].isnull().sum()/len(X_train) > 0.20]   
@@ -74,6 +77,7 @@ for train_index, test_index in rs.split(X):
     print("Droping cols due to NAs: ", cols_with_missing)
     X_train.drop(cols_with_missing, axis=1, inplace=True)
     X_test.drop(cols_with_missing, axis=1, inplace=True)
+    X_val_rep.drop(cols_with_missing, axis=1, inplace=True)
 
     # "Cardinality" means the number of unique values in a column
     # Select categorical columns with relatively low cardinality (convenient but arbitrary)
@@ -89,25 +93,29 @@ for train_index, test_index in rs.split(X):
     my_cols = categorical_cols + numerical_cols
     X_train = X_train[my_cols].copy()    
     X_test = X_test[my_cols].copy()
+    X_val_rep = X_val_rep[my_cols].copy()
 
     # Preprocessing    
     X_train = simple_imputer(df=X_train, cols=numerical_cols, strategy='mean')
     X_test = simple_imputer(df=X_test, cols=numerical_cols, strategy='mean')
-    
+    X_val_rep = simple_imputer(df=X_val_rep, cols=numerical_cols, strategy='mean')
+
     X_train = simple_imputer(df=X_train, cols=categorical_cols, strategy='most_frequent')
     X_test = simple_imputer(df=X_test, cols=categorical_cols, strategy='most_frequent')
+    X_val_rep = simple_imputer(df=X_val_rep, cols=categorical_cols, strategy='most_frequent')
 
     # OneHotEncoder
     X_train = pd.get_dummies(X_train, prefix_sep='_', drop_first=True)
     X_test = pd.get_dummies(X_test, prefix_sep='_', drop_first=True)
-    
+    X_val_rep = pd.get_dummies(X_val_rep, prefix_sep='_', drop_first=True)
+
     # Remove features with low variance
     cols_before_var = set(X_train.columns)
     var_threshold = 0.05
-    X_train = variance_threshold_selector(df=X_train, threshold=var_threshold)    
-    X_test = variance_threshold_selector(df=X_test, threshold=var_threshold)    
-    print("VarFilter removed:", len(cols_before_var - set(X_train.columns)))
-    print("Remaining: ", len(X_train.columns))
+    
+    X_train = variance_threshold_selector(df=X_train, threshold=var_threshold)  #fit and transform
+    X_test = X_test[X_train.columns]   # transform
+    X_val_rep = X_val_rep[X_train.columns]
 
 
     # ==== Feature selection ====
@@ -145,25 +153,30 @@ for train_index, test_index in rs.split(X):
                 'booster': ['gbtree', 'gblinear', 'dart'],
                 'subsample': [0.7],
                 'colsample_bytree': [0.7],
-                'n_estimators': [512, 1024, 1536]}
+                'n_estimators': [10]}#[512, 1024, 1536]}
 
     xgb_grid_sel_f_i = GridSearchCV(xgb1,
                             parameters,
                             cv = 5,
+                            scoring = 'neg_mean_absolute_error',
                             n_jobs = 4,
                             verbose=False)
 
     xgb_grid_sel_f_u = GridSearchCV(xgb1,
                             parameters,
                             cv = 5,
+                            scoring = 'neg_mean_absolute_error',
                             n_jobs = 4,
                             verbose=False)
 
     xgb_grid = GridSearchCV(xgb1,
                             parameters,
                             cv = 5,
+                            scoring = 'neg_mean_absolute_error',
                             n_jobs = 4,
                             verbose=False)
+
+    # log y ... 
 
     # X_sel_var
     xgb_grid_sel_f_i.fit(X_train[selected_features_intersection], y_train)
@@ -172,14 +185,24 @@ for train_index, test_index in rs.split(X):
     # X_all_var
     xgb_grid.fit(X_train, y_train)
 
+
+
     print("Selected features score u: ", xgb_grid_sel_f_u.best_score_)
     print(xgb_grid.best_params_)
+    mae_u = mean_absolute_error(xgb_grid_sel_f_u.predict(X_test[selected_features_union]), y_test)
+    print("MAE test: ", mae_u)
     print("Number of features: ", len(X_train[selected_features_union].columns))
 
     print("Selected features score i: ", xgb_grid_sel_f_i.best_score_)
     print(xgb_grid.best_params_)
+    mae_i = mean_absolute_error(xgb_grid_sel_f_i.predict(X_test[selected_features_intersection]), y_test)
+    print("MAE test: ", mae_u)
     print("Number of features: ", len(X_train[selected_features_intersection].columns))
 
     print("All features score: ", xgb_grid.best_score_)
     print(xgb_grid.best_params_)
+    mae = mean_absolute_error(xgb_grid.predict(X_test), y_test)
+    print("MAE test: ", mae_u)
     print("Number of features: ", len(X_train.columns))
+
+
