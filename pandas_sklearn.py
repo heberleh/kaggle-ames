@@ -11,16 +11,18 @@ def variance_threshold_selector(df, threshold=0.0):
     return df[df.columns[selector.get_support(indices=True)]]
 
 
-def simple_imputer(df, df_test, cols=[], strategy=None):
+def simple_imputer(df, df_test=None, cols=[], strategy=None, fill_value=None):
     df2 = df.copy()
     if len(cols) == 0:        
         cols = df2.columns    
-    imputer = SimpleImputer(strategy=strategy)
+    imputer = SimpleImputer(strategy=strategy, fill_value=fill_value)
     df2[cols] = imputer.fit_transform(df2[cols])
 
-    df_test2 = df_test.copy()
-    df_test2[cols] = imputer.transform(df_test2[cols])
-    return (df2, df_test2)
+    if df_test:
+        df_test2 = df_test.copy()
+        df_test2[cols] = imputer.transform(df_test2[cols])
+        return (df2, df_test2)
+    return df2
 
 
 from sklearn.feature_selection import SelectKBest, SelectFromModel
@@ -33,7 +35,11 @@ def select_k_best(df_X, df_y, scoring_function, k):
     return df_X.columns[selector.get_support(indices=True)]
 
 
+from sklearn.pipeline import Pipeline
 def select_from_model(df_X, df_y, model, threshold="median"):
-    selector = SelectFromModel(estimator=model, threshold=threshold)    
+    m = model
+    if isinstance(m, Pipeline):        
+        m = model.steps[1][1]        
+    selector = SelectFromModel(estimator=m, threshold=threshold)    
     selector.fit(df_X, df_y)
     return df_X.columns[selector.get_support(indices=True)]    
