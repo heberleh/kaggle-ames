@@ -15,16 +15,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import RFECV, VarianceThreshold
 from sklearn.svm import SVR
 from xgboost import XGBRegressor
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.linear_model import LinearRegression, Ridge
 
 from pandas_sklearn import simple_imputer, variance_threshold_selector, select_k_best, select_from_model
 
 target_class = "SalePrice"
-cols_must_drop = ["Id", "MoSold", "YrSold", "BsmtFinSF2"]
-# BsmtFinType1,BsmtFinSF1,BsmtFinType2,BsmtFinSF2
-log_transform = ["SalePrice", "LotArea"]
+cols_must_drop = ["Id", "BsmtFinSF2"]
+# BsmtFinType1,BsmtFinSF1,BsmtFinType2,BsmtFinSF2  "YrSold", "MoSold"
+log_transform = ["SalePrice"]
 
 
-must_try_include = ["KitchenQual", "OverallQual", "OverallCond", "Year.Built", "YearRemodAdd","TotalBsmtSF"] # "SaleCondition"
+must_try_include = []#, "KitchenQual" "OverallQual", "OverallCond", "Year.Built", "YearRemodAdd","TotalBsmtSF", "SaleCondition"]
 
 random_state = 2019
 np.random.RandomState(random_state)
@@ -134,14 +136,18 @@ for train_index, test_index in kf.split(X):
 
     # f_regression
     best15_f_regression = select_k_best(X_train, y_train, f_regression, 15)
+    best25_f_regression = select_k_best(X_train, y_train, f_regression, 25)
 
     best15_mutual_info_regression = select_k_best(X_train, y_train, mutual_info_regression, 15)
+    best25_mutual_info_regression = select_k_best(X_train, y_train, mutual_info_regression, 25)
 
     # median_from_svr_linear = select_from_model(X_train, y_train, SVR(kernel="linear"), threshold='median')
     # median_from_svr_rbf = select_from_model(X_train, y_train, SVR(kernel="rbf"), threshold='median')
     # median_from_svr_poly = select_from_model(X_train, y_train, SVR(kernel="poly"), threshold='median')
 
-    median_from_random_forest = select_from_model(X_train, y_train, RandomForestRegressor(n_estimators=128, random_state=random_state, n_jobs=8), threshold='median')
+    median_from_random_forest = select_from_model(X_train, y_train, RandomForestRegressor(n_estimators=34, random_state=random_state, n_jobs=4), threshold='median')
+
+    mean_from_random_forest = select_from_model(X_train, y_train, RandomForestRegressor(n_estimators=34, random_state=random_state, n_jobs=4), threshold='mean')
 
     selected_features_intersection = set(best15_f_regression).intersection(
         set(best15_mutual_info_regression)).intersection(
@@ -151,101 +157,102 @@ for train_index, test_index in kf.split(X):
         set(best15_mutual_info_regression)).union(
             set(median_from_random_forest))
 
+    
+    features_space = [
+        median_from_random_forest,
+        mean_from_random_forest,
+        selected_features_union,
+        selected_features_intersection,
+        best15_f_regression,
+        best15_mutual_info_regression,
+        best25_f_regression,
+        best25_mutual_info_regression,
+        set(X_train.columns)
+    ]
+
     # adding back MUST variables
     if len(must_try_include) > 0:
-        for col in X_train.columns:
-            print("col",col)
-            for name in must_try_include:
-                print("name", name)
+        for col in X_train.columns:            
+            for name in must_try_include:                
                 if name in col:
-                    print(col, "included")
-                    selected_features_intersection.add(col)
-                    selected_features_union.add(col)                  
+                    for l in features_space:                
+                        l.add(col)                    
 
-    # Various hyper-parameters to tune
-    xgb1 = XGBRegressor()
-    parameters = {'nthread':[4], #when use hyperthread, xgboost may become slower
-                'objective':['reg:linear'],
-                'learning_rate': [.03, 0.05, .07], #so called `eta` value
-                'max_depth': [4, 7],
-                'min_child_weight': [4],
-                'silent': [1],
-                'booster': ['gbtree'],
-                'subsample': [0.95],
-                'colsample_bytree': [1],
-                'n_estimators': [1001]}
+    model = TransformedTargetRegressor()
+    inner_jobs = 4
+    param_range = [0.01, 0.1, 1, 10, 100]
+    params = [
+        {
+            "regressor": [LinearRegression()],            
+            "regressor__n_jobs": [inner_jobs],
+            "regressor__normalize" : [True]
+        },
+        {
+            "regressor": [Ridge()],
+            "regressor__hidden_layer_sizes": [1, 5, 10]
+        },
+        {
+            "regressor": [SVR()],
+            "regressor__kernel": ["linear", "poly", "rbf"],
+            "regressor__C'": param_range,
+            "regressor__gamma'": param_range
+        },
+        {
+            "regressor": [XGBRegressor()],
+                'regressor__nthread':[inner_jobs], #when use hyperthread, xgboost may become slower
+                'regressor__objective':['reg:linear'],
+                'regressor__learning_rate': [.01, 0.03], #so called `eta` value
+                'regressor__max_depth': [4, 5],
+                'regressor__min_child_weight': [4],
+                'regressor__silent': [1],
+                'regressor__booster': ['gbtree'],
+                'regressor__subsample': [1],
+                'regressor__colsample_bytree': [1],
+                'regressor__n_estimators': [1001]               
+        }
+    ]
 
-    inner_k = 6
+    inner_k = 4
     grid_jobs = 2
-    xgb_grid_sel_f_i = GridSearchCV(xgb1,
-                            parameters,
+    best_features = []
+    best_grid = None
+    best_score = 9999999999999999999999999999
+    for feature_list in features_space:
+        grid = GridSearchCV(model,
+                            params,
                             cv = inner_k,
                             scoring = 'neg_mean_absolute_error',
                             n_jobs = grid_jobs,
                             verbose=False)
 
-    xgb_grid_sel_f_u = GridSearchCV(xgb1,
-                            parameters,
-                            cv = inner_k,
-                            scoring = 'neg_mean_absolute_error',
-                            n_jobs = grid_jobs,
-                            verbose=False)
+        grid.fit(X_train[feature_list], y_train)
+        if grid.best_score_ < best_score:
+            best_grid = grid
+            best_features = feature_list
 
-    xgb_grid = GridSearchCV(xgb1,
-                            parameters,
-                            cv = inner_k,
-                            scoring = 'neg_mean_absolute_error',
-                            n_jobs = grid_jobs,
-                            verbose=False)
-
-    # X_sel_var
-    xgb_grid_sel_f_i.fit(X_train[selected_features_intersection], y_train)
-    xgb_grid_sel_f_u.fit(X_train[selected_features_union], y_train)
-
-    # X_all_var
-    xgb_grid.fit(X_train, y_train)
-
-    result = {
-        "intersection": {},
-        "union": {},
-        "all": {}
-    }
 
     def test(grid, X_test, y_test):
         result = {}
         result["best_cv_score"] = abs(grid.best_score_)
-        result["mae_test"] = abs(mean_absolute_error(grid.predict(X_test), y_test))
-        result["performance"] = abs(result["best_cv_score"] - result["mae_test"])
+        result["mae_test_exp"] = abs(mean_absolute_error(np.exp(grid.predict(X_test)), np.exp(y_test))) 
+        result["mae_test"] = abs(mean_absolute_error(grid.predict(X_test), y_test))        
         result["variables"] = X_test.columns
         result["best_parameters"] = grid.best_params_
         return result
 
-    def predict(X_full, y_full, X_val, parameters):
-            xgb = XGBRegressor()
-            parameters["n_estimators"] = 2000         
-            xgb.set_params(**parameters)
-            xgb.fit(X_full, y_full)
-            return xgb.predict(X_val)
-    
+    def predict(X_full, y_full, X_val, grid):
+            #g.best_estimator_, g.best_score_, g.best_params_
+            regressor = grid.best_estimator_            
+            regressor.fit(X_full, y_full)
+            return regressor.predict(X_val)
 
-    print("\n\n\n----------------------------------------------------")
-    print(rep)
-    print("\n\nintersection")
-    print(">>>> number of features ", len(selected_features_intersection))
-    result["intersection"] = test(xgb_grid_sel_f_i, X_test[selected_features_intersection], y_test)
-    result["intersection"]["prediction"] = predict(X_full[selected_features_intersection], 
-                                                    y, X_val_rep[selected_features_intersection], xgb_grid_sel_f_i.best_params_)
 
-    print("\n\nunion")
-    result["union"] = test(xgb_grid_sel_f_u, X_test[selected_features_union], y_test)
-    result["union"]["prediction"] = predict(X_full[selected_features_union], 
-                                                    y, X_val_rep[selected_features_union], xgb_grid_sel_f_u.best_params_)
-
-    print("\n\nall")
-    result["all"] = test(xgb_grid, X_test, y_test)
-    result["all"]["prediction"] = predict(X_full, y, X_val_rep, xgb_grid.best_params_)
+    result = test(best_grid, X_test[best_features], y_test)
+   
+    result["prediction"] = predict(X_full[best_features], y, X_val_rep[best_features], grid)  
     
     results[rep] = result
+    #TODO !!!! editar fim do script que usa result["intersection"] ainda... 
 
 
 home_val = pd.read_csv("data/test.csv") #reintroduce Id
@@ -270,11 +277,17 @@ submission.to_csv("submission.csv", index=False)
 
 final_variables = []
 for col in home_val.columns:
-    if col in selected_result["variables"]:
-        final_variables.append(col)
+    for name in selected_result["variables"]:
+        if col in name:
+            final_variables.append(col)
+pd.DataFrame(final_variables).to_csv("selected_variables_may_have_error.csv", index=False, header=False)
+
+final_variables = []
+for name in selected_result["variables"]:    
+    final_variables.append(name)
 pd.DataFrame(final_variables).to_csv("selected_variables.csv", index=False, header=False)
 
-pd.DataFrame([selected_result["mae_test"],selected_result["best_cv_score"]]).to_csv("best_scores.csv", index=False, header=False)
+pd.DataFrame([selected_result["mae_test"],selected_result["mae_test_exp"],selected_result["best_cv_score"]]).to_csv("best_scores.csv", index=False, header=False)
 
 import json
 with open('best_parameters.json', 'w') as file:
