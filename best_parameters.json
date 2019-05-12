@@ -1,1 +1,1 @@
-{"booster": "gbtree", "colsample_bytree": 0.7, "learning_rate": 0.03, "max_depth": 7, "min_child_weight": 4, "n_estimators": 1333, "nthread": 2, "objective": "reg:linear", "silent": 1, "subsample": 0.7}
+{"booster": "gbtree", "colsample_bytree": 1, "learning_rate": 0.03, "max_depth": 4, "min_child_weight": 4, "n_estimators": 2000, "nthread": 4, "objective": "reg:linear", "silent": 1, "subsample": 0.95}

@@ -1,5 +1,4 @@
 MSSubClass
-LotFrontage
 LotArea
 OverallQual
 OverallCond
@@ -7,7 +6,6 @@ YearBuilt
 YearRemodAdd
 MasVnrArea
 BsmtFinSF1
-BsmtFinSF2
 BsmtUnfSF
 TotalBsmtSF
 1stFlrSF
@@ -21,7 +19,6 @@ HalfBath
 BedroomAbvGr
 TotRmsAbvGrd
 Fireplaces
-GarageYrBlt
 GarageCars
 GarageArea
 WoodDeckSF
@@ -29,6 +26,5 @@ OpenPorchSF
 EnclosedPorch
 3SsnPorch
 ScreenPorch
+PoolArea
 MiscVal
-MoSold
-YrSold

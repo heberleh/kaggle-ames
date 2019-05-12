@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import feature_selection
 from sklearn import preprocessing
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import RFECV, VarianceThreshold
@@ -19,8 +19,12 @@ from xgboost import XGBRegressor
 from pandas_sklearn import simple_imputer, variance_threshold_selector, select_k_best, select_from_model
 
 target_class = "SalePrice"
-cols_must_drop = ["Id"]
+cols_must_drop = ["Id", "MoSold", "YrSold", "BsmtFinSF2"]
+# BsmtFinType1,BsmtFinSF1,BsmtFinType2,BsmtFinSF2
 log_transform = ["SalePrice", "LotArea"]
+
+
+must_try_include = ["KitchenQual", "OverallQual", "OverallCond", "Year.Built", "YearRemodAdd","TotalBsmtSF"] # "SaleCondition"
 
 random_state = 2019
 np.random.RandomState(random_state)
@@ -52,10 +56,11 @@ X = home_data.copy()
 X.drop(['SalePrice'], axis=1, inplace=True)
 
 
-rs = ShuffleSplit(n_splits=1, train_size=0.1, test_size=0.1, random_state=random_state)
+kf = ShuffleSplit(n_splits=3, train_size=0.9, test_size=0.1, random_state=random_state)
+#kf = KFold(n_splits=5, shuffle=True, random_state=random_state)
 rep = 0
 results = {}
-for train_index, test_index in rs.split(X):
+for train_index, test_index in kf.split(X):
 
     print("--------- Rep ", rep, "---------")
     rep += 1
@@ -71,7 +76,7 @@ for train_index, test_index in rs.split(X):
 
     # Get names of columns with too much missing values
     cols_with_missing = [col for col in X_train.columns
-                        if X_train[col].isnull().sum()/len(X_train) > 0.20]   
+                        if X_train[col].isnull().sum()/len(X_train) > 0.05]   
     for col in cols_with_missing:
         dropped_features.add(col)
 
@@ -146,38 +151,51 @@ for train_index, test_index in rs.split(X):
         set(best15_mutual_info_regression)).union(
             set(median_from_random_forest))
 
+    # adding back MUST variables
+    if len(must_try_include) > 0:
+        for col in X_train.columns:
+            print("col",col)
+            for name in must_try_include:
+                print("name", name)
+                if name in col:
+                    print(col, "included")
+                    selected_features_intersection.add(col)
+                    selected_features_union.add(col)                  
+
     # Various hyper-parameters to tune
     xgb1 = XGBRegressor()
-    parameters = {'nthread':[2], #when use hyperthread, xgboost may become slower
+    parameters = {'nthread':[4], #when use hyperthread, xgboost may become slower
                 'objective':['reg:linear'],
                 'learning_rate': [.03, 0.05, .07], #so called `eta` value
                 'max_depth': [4, 7],
                 'min_child_weight': [4],
                 'silent': [1],
                 'booster': ['gbtree'],
-                'subsample': [0.7],
-                'colsample_bytree': [0.7],
+                'subsample': [0.95],
+                'colsample_bytree': [1],
                 'n_estimators': [1001]}
 
+    inner_k = 6
+    grid_jobs = 2
     xgb_grid_sel_f_i = GridSearchCV(xgb1,
                             parameters,
-                            cv = 4,
+                            cv = inner_k,
                             scoring = 'neg_mean_absolute_error',
-                            n_jobs = 4,
+                            n_jobs = grid_jobs,
                             verbose=False)
 
     xgb_grid_sel_f_u = GridSearchCV(xgb1,
                             parameters,
-                            cv = 4,
+                            cv = inner_k,
                             scoring = 'neg_mean_absolute_error',
-                            n_jobs = 4,
+                            n_jobs = grid_jobs,
                             verbose=False)
 
     xgb_grid = GridSearchCV(xgb1,
                             parameters,
-                            cv = 4,
+                            cv = inner_k,
                             scoring = 'neg_mean_absolute_error',
-                            n_jobs = 4,
+                            n_jobs = grid_jobs,
                             verbose=False)
 
     # X_sel_var
@@ -204,9 +222,11 @@ for train_index, test_index in rs.split(X):
 
     def predict(X_full, y_full, X_val, parameters):
             xgb = XGBRegressor()
+            parameters["n_estimators"] = 2000         
             xgb.set_params(**parameters)
             xgb.fit(X_full, y_full)
             return xgb.predict(X_val)
+    
 
     print("\n\n\n----------------------------------------------------")
     print(rep)
@@ -254,6 +274,7 @@ for col in home_val.columns:
         final_variables.append(col)
 pd.DataFrame(final_variables).to_csv("selected_variables.csv", index=False, header=False)
 
+pd.DataFrame([selected_result["mae_test"],selected_result["best_cv_score"]]).to_csv("best_scores.csv", index=False, header=False)
 
 import json
 with open('best_parameters.json', 'w') as file:
