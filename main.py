@@ -24,7 +24,7 @@ np.random.RandomState(random_state)
 from regression import *
 
 target_class = "SalePrice"
-cols_must_drop = ["Id", "BsmtFinSF2", "PoolQC", "MoSold"]
+cols_must_drop = ["Id"]
 # BsmtFinType1,BsmtFinSF1,BsmtFinType2,BsmtFinSF2  "YrSold", 
 log_transform = ["SalePrice"]
 
@@ -73,10 +73,12 @@ home_data.drop([target_class], axis=1, inplace=True)
 
 data = pd.concat([home_data, home_test], sort=True).reset_index(drop=True)
 
+#Thanks Alex Lekov for the ideas shared at 
+# https://www.kaggle.com/itslek/stack-blend-lrs-xgb-lgb-house-prices-k-v17#L189
 # Change data type
 data['MSSubClass'] = data['MSSubClass'].apply(str)
 data['YrSold'] = data['YrSold'].astype(str)
-#data['MoSold'] = data['MoSold'].astype(str)
+data['MoSold'] = data['MoSold'].astype(str)
 
 data['MSZoning'] = data.groupby('MSSubClass')['MSZoning'].transform(lambda x: x.fillna(x.mode()[0]))
 data['LotFrontage'] = data.groupby('Neighborhood')['LotFrontage'].transform(lambda x: x.fillna(x.median()))
@@ -113,14 +115,11 @@ data = simple_imputer(df=data, cols=categorical_cols, strategy='constant', fill_
 # Creating new features
 data['TotalSF'] = data['TotalBsmtSF'] + data['1stFlrSF'] + data['2ndFlrSF']
 
-data['Total_sqr_footage'] = (data['BsmtFinSF1'] + data['1stFlrSF'] + data['2ndFlrSF'])
+data['Total_sqr_footage'] = (data['BsmtFinSF1'] + data["BsmtFinSF2"] + data['1stFlrSF'] + data['2ndFlrSF'])
 
-data['Total_Bathrooms'] = (data['FullBath'] + (0.5 * data['HalfBath']) +
-                               data['BsmtFullBath'] + (0.5 * data['BsmtHalfBath']))
+data['Total_Bathrooms'] = (data['FullBath'] + (0.5 * data['HalfBath']) + data['BsmtFullBath'] + (0.5 * data['BsmtHalfBath']))
 
-data['Total_porch_sf'] = (data['OpenPorchSF'] + data['3SsnPorch'] +
-                              data['EnclosedPorch'] + data['ScreenPorch'] +
-                              data['WoodDeckSF'])
+data['Total_porch_sf'] = (data['OpenPorchSF'] + data['3SsnPorch'] + data['EnclosedPorch'] + data['ScreenPorch'] + data['WoodDeckSF'])
 
 # simplified features
 data['haspool'] = data['PoolArea'].apply(lambda x: 1 if x > 0 else 0)
@@ -139,7 +138,7 @@ for feature in features_to_log:
 data = pd.get_dummies(data, prefix_sep='_', drop_first=True)
 
 # Remove features with low variance
-data = variance_threshold_selector(df=data, threshold=0.001)
+data = variance_threshold_selector(df=data, threshold=0.00)
 
 # Separate target from predictors
 X_train = data.iloc[:len(y), :]
@@ -152,14 +151,12 @@ from sklearn.feature_selection import f_regression, mutual_info_regression # for
 # f_regression
 # best15_f_regression = select_k_best(X_train, y, f_regression, 15)
 # best25_f_regression = select_k_best(X_train, y, f_regression, 25)
-best100_f_regression = select_k_best(X_train, y, f_regression, 100)
+# best100_f_regression = select_k_best(X_train, y, f_regression, 100)
 
-# best15_mutual_info_regression = select_k_best(X_train, y, mutual_info_regression, 15)
-# best25_mutual_info_regression = select_k_best(X_train, y, mutual_info_regression, 25)
-best100_mutual_info_regression = select_k_best(X_train, y, mutual_info_regression, 100)
+#best15_mutual_info_regression = select_k_best(X_train, y, mutual_info_regression, 15)
+#best150_mutual_info_regression = select_k_best(X_train, y, mutual_info_regression, 150)
 
-
-#median_from_random_forest = select_from_model(X_train, y, RandomForestRegressor(n_estimators=81, random_state=random_state, n_jobs=4), threshold='median')
+#median_from_random_forest = select_from_model(X_train, y, rf, threshold='median')
 
 #median_from_random_forest = select_from_model(X_train, y, svr, threshold='mean')
 
@@ -170,12 +167,13 @@ best100_mutual_info_regression = select_k_best(X_train, y, mutual_info_regressio
 #median_from_elasticnet = select_from_model(X_train, y, elasticnet, threshold='median')
 
 features_space = {
-    #"rf" : median_from_random_forest,
+    #"rf" : median_from_random_forest
     #"lasso" : median_features_spacefrom_lasso,
     #"elasticnet": median_from_elasticnet,
     #"ridge": median_from_ridge,
-    "f_regr": best100_f_regression,
-    "mutual_info": best100_mutual_info_regression,
+    #"f_regr": best100_f_regression,
+    #"mutual_info15": best15_mutual_info_regression
+    #"mutual_info50": best50_mutual_info_regression
     "all": set(X_train.columns)
 }
 
@@ -186,13 +184,12 @@ from sklearn.model_selection import cross_val_score
 models = {
     'Ridge': ridge,
     'Lasso': lasso,
-    'SVR': svr,
+    #'SVR': svr,
     'Elastic Net': elasticnet,
     'XGB': xgbr,
+    'LightGBM': lightgbm,
     'Stack1': stack1,
-    'Stack2': stack2,
-    'Stack3': stack3,
-    'Stack4': stack4
+    #'Stack2': stack2
 }
 
 scores = []
@@ -206,10 +203,10 @@ for model_name in models:
     selected_features = None
     print("Computing: ", model_name)
     for name in features_space:
-        print("    using ",name)
+        print("    using ",name, " n=",len(features_space[name]))
         score = cross_val_score(model, np.array(X_train[features_space[name]]), np.array(y), cv=10, scoring='neg_mean_squared_error')
         scores.append([model_name, name, len(features_space[name]), np.mean(score), np.median(score), np.std(score)])
-        print(name, len(features_space[name]), np.mean(score), np.median(score))
+        #print("    ",name, len(features_space[name]), np.mean(score), np.median(score))
         model_scores += score.tolist()
 
         # select the best features to work with the current Model
@@ -233,6 +230,14 @@ names = []
 for result in model_performance:
     estimators.append(models[result[0]])
     w = 1-(result[1]/total_error)
+    if result[0] in ['Ridge']:
+        w = w*0.6
+    if result[0] in ['Stack1']:
+        w = w*2.3
+    if result[0] in ['LightGBM']:
+        w = w*1.2
+    if result[0] in ['XGB']:
+        w = w*1.2
     weights.append(w)
     names.append(result[0])
 weights = np.array(weights)

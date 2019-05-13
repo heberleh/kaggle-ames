@@ -6,7 +6,7 @@ from sklearn.model_selection import KFold
 from xgboost import XGBRegressor
 from mlxtend.regressor import StackingCVRegressor
 from sklearn.ensemble import RandomForestRegressor
-
+from lightgbm import LGBMRegressor
 
 random_state = 2019
 
@@ -31,28 +31,36 @@ elasticnet = make_pipeline(RobustScaler(),
 svr = make_pipeline(RobustScaler(),
                     SVR(C=20, epsilon=0.008, gamma=0.0003, ))
 
-xgbr = XGBRegressor(learning_rate=0.01, n_estimators=3000,
-                       max_depth=4, min_child_weight=0,
+xgbr = XGBRegressor(learning_rate=0.01, n_estimators=4000,
+                       max_depth=3, min_child_weight=0,
                        gamma=0, subsample=0.7,
                        colsample_bytree=0.7,
                        objective='reg:linear', nthread=8,
                        scale_pos_weight=1, seed=27,
                        reg_alpha=0.00006)
 
-rf = RandomForestRegressor(n_estimators=81, random_state=random_state, n_jobs=4)
+rf = RandomForestRegressor(n_estimators=1000, max_depth=3, random_state=random_state, n_jobs=8)
 
-stack1 = StackingCVRegressor(regressors=(ridge, lasso, elasticnet, svr, xgbr),
+lightgbm = LGBMRegressor(objective='regression',
+                         num_leaves=4,
+                         learning_rate=0.01,
+                         n_estimators=5000,
+                         max_bin=200,
+                         bagging_fraction=0.75,
+                         bagging_freq=5,
+                         bagging_seed=7,
+                         feature_fraction=0.2,
+                         feature_fraction_seed=7,
+                         verbose=-1,
+                         # min_data_in_leaf=2,
+                         # min_sum_hessian_in_leaf=11
+                         )          
+
+stack1 = StackingCVRegressor(regressors=(ridge, lasso, elasticnet,
+                                            xgbr, lightgbm),
                                 meta_regressor=xgbr,
                                 use_features_in_secondary=True)
 
-stack2 = StackingCVRegressor(regressors=(ridge, elasticnet, lasso),
-                                meta_regressor=elasticnet,
-                                use_features_in_secondary=True)
-
-stack3 = StackingCVRegressor(regressors=(ridge, lasso, xgbr),
+stack2 = StackingCVRegressor(regressors=(elasticnet, lasso, xgbr, lightgbm),
                                 meta_regressor=xgbr,
-                                use_features_in_secondary=True)
-
-stack4 = StackingCVRegressor(regressors=(ridge, lasso, elasticnet),
-                                meta_regressor=lasso,
                                 use_features_in_secondary=True)
