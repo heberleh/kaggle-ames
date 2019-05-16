@@ -71,7 +71,7 @@ stack1 = StackingCVRegressor(regressors=(ridge, lasso, elasticnet,
                                 meta_regressor=xgbr,
                                 use_features_in_secondary=True)
 
-stack2 = StackingCVRegressor(regressors=(elasticnet, lasso, xgbr, lightgbm),
+stack2 = StackingCVRegressor(regressors=(ridge, elasticnet, lasso, xgbr),
                                 meta_regressor=xgbr,
                                 use_features_in_secondary=True)
 
