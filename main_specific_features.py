@@ -20,11 +20,11 @@ from sklearn.compose import TransformedTargetRegressor
 from sklearn.linear_model import LinearRegression, Ridge
 
 from pandas_sklearn import *
+from regression import *
 
 random_state = 2019
 np.random.RandomState(random_state)
 
-from regression import *
 
 target_class = "SalePrice"
 cols_must_drop = ["Id", "MoSold"]
@@ -67,7 +67,7 @@ for feature in home_data.columns:
     if feature != target_class and home_data[feature].dtype in numeric_dtypes:
         cor1 = np.corrcoef(home_data[feature],home_data[target_class])[0][1]
         cor2 = np.corrcoef(np.log1p(home_data[feature]),home_data[target_class])[0][1]
-        if (abs(cor2) - abs(cor1)) > 0.05:
+        if (abs(cor2) - abs(cor1)) > 0.10:
             features_to_log.append(feature)
             print("Applied Log to: ", feature, " due to corr improv. of: ", abs(cor2) - abs(cor1))
 
@@ -81,14 +81,14 @@ data = pd.concat([home_data, home_test], sort=True).reset_index(drop=True)
 # Change data type
 data['MSSubClass'] = data['MSSubClass'].apply(str)
 data['YrSold'] = data['YrSold'].astype(str)
-data['MoSold'] = data['MoSold'].astype(str)
+#data['MoSold'] = data['MoSold'].astype(str)
 
 data['MSZoning'] = data.groupby('MSSubClass')['MSZoning'].transform(lambda x: x.fillna(x.mode()[0]))
 data['LotFrontage'] = data.groupby('Neighborhood')['LotFrontage'].transform(lambda x: x.fillna(x.median()))
 
 # Get names of columns with too much missing values
 cols_with_missing = [col for col in data.columns
-                    if data[col].isnull().sum()/len(data) > 0.05]
+                    if data[col].isnull().sum()/len(data) > 0.50]
 
 # Drop columns in training and validation data
 data.drop(cols_with_missing, axis=1, inplace=True)
@@ -149,79 +149,106 @@ X_test = data.iloc[len(X_train):, :]
 
 
 #%% 
-param_grid = {
-    'objective':['regression'],
-    'num_leaves': [4, 5, 9],
-    'max_bin': [200],
-    'n_estimators': [1000, 2000, 3000],
-    'feature_fraction': [0.2, 0.7, 0.9],
-    'bagging_fraction': [0.2, 0.75, 0.9], 
-    'bagging_seed': [7],
-    'reg_alpha': [0.0, 0.0001, 0.1],
-    'bagging_freq': [3, 5],
-    'num_boost_round': [20, 50],
-    'learning_rate': [0.01, 0.02, 0.03],
-    'max_depth': [3, 5, 7],
-    'eval_metric': ['l1'],
-    'verbose': [-1]
-}
+if False:
+    param_grid = {
+        'objective':['regression'],
+        'num_leaves': [4, 5, 9],
+        'max_bin': [200],
+        'n_estimators': [1000, 2000, 3000],
+        'feature_fraction': [0.2, 0.7, 0.9],
+        'bagging_fraction': [0.2, 0.75, 0.9], 
+        'bagging_seed': [7],
+        'reg_alpha': [0.0, 0.0001, 0.1],
+        'bagging_freq': [3, 5],
+        'num_boost_round': [20, 50],
+        'learning_rate': [0.01, 0.02, 0.03],
+        'max_depth': [3, 5, 7],
+        'eval_metric': ['l1'],
+        'verbose': [-1]
+    }
 
-from lightgbm import LGBMRegressor
-lgb_estimator = LGBMRegressor()
-kfolds = KFold(n_splits=3, shuffle=True, random_state=random_state)
+    from lightgbm import LGBMRegressor
+    lgb_estimator = LGBMRegressor()
+    kfolds = KFold(n_splits=3, shuffle=True, random_state=random_state)
 
-gsearch = GridSearchCV(estimator=lgb_estimator, 
-                        param_grid=param_grid, 
-                        cv=kfolds,
-                        scoring='neg_mean_absolute_error') 
+    gsearch = GridSearchCV(estimator=lgb_estimator, 
+                            param_grid=param_grid, 
+                            cv=kfolds,
+                            scoring='neg_mean_absolute_error') 
 
-lgb_model = gsearch.fit(X=X_train, 
-                        y=y)
+    lgb_model = gsearch.fit(X=X_train, 
+                            y=y)
 
-print(lgb_model.best_params_, lgb_model.best_score_)
+    print(lgb_model.best_params_, lgb_model.best_score_)
 
 
 
 
 #%%
+if False:
+    from xgboost import XGBRegressor
+    from sklearn.model_selection import KFold
 
-from xgboost import XGBRegressor
-from sklearn.model_selection import KFold
+    param_grid = {'learning_rate':[0.01, 0.03, 0.05], 
+                    'n_estimators':[1000, 4000],
+                        'max_depth': [3, 4, 6],
+                        'min_child_weight': [0],
+                        'gamma': [0, 0.1] , 
+                        'subsample': [0.3, 0.75],
+                        'colsample_bytree': [0.3, 0.75],
+                        'objective':['reg:linear'], 
+                        'nthread':[2],
+                        'scale_pos_weight':[1],
+                        'seed':[27],
+                        'reg_alpha': [0.0001, 0.01] 
+                    }
 
-param_grid = {'learning_rate':[0.01, 0.03, 0.05], 
-                'n_estimators':[1000, 4000],
-                    'max_depth': [3, 4, 6],
-                    'min_child_weight': [0],
-                    'gamma': [0, 0.1] , 
-                    'subsample': [0.3, 0.75],
-                    'colsample_bytree': [0.3, 0.75],
-                    'objective':['reg:linear'], 
-                    'nthread':[2],
-                    'scale_pos_weight':[1],
-                    'seed':[27],
-                    'reg_alpha': [0.0001, 0.01] 
-                }
+    estimator = XGBRegressor()
 
-estimator = XGBRegressor()
+    kfolds = KFold(n_splits=3, shuffle=True, random_state=random_state)
 
-kfolds = KFold(n_splits=3, shuffle=True, random_state=random_state)
+    gsearch = GridSearchCV(estimator=estimator, 
+                        param_grid=param_grid, 
+                        cv=kfolds, 
+                        scoring='neg_mean_absolute_error',
+                        n_jobs=3)
 
-gsearch = GridSearchCV(estimator=estimator, 
-                    param_grid=param_grid, 
-                    cv=kfolds, 
-                    scoring='neg_mean_absolute_error',
-                    n_jobs=3)
+    lgb_model = gsearch.fit(X=X_train, 
+                            y=y)
 
-lgb_model = gsearch.fit(X=X_train, 
-                        y=y)
+    print(lgb_model.best_params_, lgb_model.best_score_)
 
-print(lgb_model.best_params_, lgb_model.best_score_)
+
+
+#%%
+# RFE
+# ridge = Mypipeline([("scaler", RobustScaler()),
+#                         ("model", RidgeCV(alphas=alphas_alt, cv=kfolds, scoring='neg_mean_absolute_error'))])
+
+# lasso = Mypipeline([("scaler", RobustScaler()),
+#                         ("model", LassoCV(max_iter=1e7, alphas=alphas2,
+#                               random_state=42, cv=kfolds))])
+                                                              
+# elasticnet = Mypipeline([("scaler", RobustScaler()),
+#                         ("model", ElasticNetCV(max_iter=1e7, alphas=e_alphas,
+#                                         cv=kfolds, l1_ratio=e_l1ratio))])
+if False:
+    from my_pipeline import Mypipeline
+    svr_rfe = Mypipeline([("scaler", RobustScaler()),
+                    ("model", SVR(C=20, epsilon=0.008, gamma=0.0003, kernel='linear'))])
+
+    rfe_svr = rfe_cv(X_train, y, svr_rfe, scoring='neg_mean_absolute_error', step=1, cv=KFold(n_splits=3), n_jobs = 3)
 
 
 
 #%% 
 # BestK - univariate
 from sklearn.feature_selection import f_regression, mutual_info_regression # for regression
+
+from sklearn.linear_model import RandomizedLasso
+randomized_lasso = RandomizedLasso()
+randomized_lasso.fit(X_train, y)
+randomized_lasso_features = X_train.columns[randomized_lasso.get_support(indices=True)]  
 
 features_rfe_lasson_u_lgbm = ['1stFlrSF', '3SsnPorch', 'BedroomAbvGr', 'BsmtFinSF2', 'BsmtFullBath', 'BsmtHalfBath', 'EnclosedPorch', 'Fireplaces', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'LowQualFinSF', 'MasVnrArea', 'MiscVal', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_Po', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_GLQ', 'BsmtFinType2_LwQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Condition1_RRNn', 'Condition2_Feedr', 'Condition2_Norm', 'Electrical_SBrkr', 'ExterCond_Gd', 'ExterCond_TA', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2.5Unf', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_None', 'MasVnrType_Stone', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Family', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_ConLI', 'SaleType_ConLw', 'SaleType_New', 'SaleType_Oth', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2008', 'YrSold_2009', 'YrSold_2010', '2ndFlrSF', 'BsmtFinSF1', 'BsmtUnfSF', 'FullBath', 'TotalBsmtSF', 'ExterCond_Fa']
 #--------------------------------
@@ -254,17 +281,16 @@ features_space = {
     #'default_elasticnet': select_from_model(X_train, y, elasticnet).tolist(),
 
     "rfe": features_rfe_lasson_u_lgbm,
+    
+    "randomized_lasso": randomized_lasso_features,
+
     "all": list(set(X_train.columns))
 }
 
 print(features_space) # copy/paste to save the result in the cell below 
 
+
 #%%
-
-# Results from code above
-features_space = {
-    'best15_f_regression': ['1stFlrSF', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'OverallQual', 'TotRmsAbvGrd', 'TotalBsmtSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'ExterQual_TA', 'KitchenQual_TA'], 'best35_f_regression': ['1stFlrSF', 'BsmtFinSF1', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'LotFrontage', 'MasVnrArea', 'OverallQual', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'hasfireplace', 'BsmtFinType1_GLQ', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'HeatingQC_TA', 'KitchenQual_Gd', 'KitchenQual_TA', 'MSZoning_RM', 'MasVnrType_None', 'SaleCondition_Partial', 'SaleType_New'], 'best25_f_regression': ['1stFlrSF', '2ndFlrSF', 'BedroomAbvGr', 'BsmtFinSF1', 'BsmtFullBath', 'BsmtUnfSF', 'EnclosedPorch', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'MasVnrArea', 'OpenPorchSF', 'OverallQual', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'has2ndfloor', 'hasgarage', 'hasbsmt', 'hasfireplace', 'BsmtCond_TA', 'BsmtCond_missing_value', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtExposure_missing_value', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_Rec', 'BsmtFinType1_missing_value', 'BsmtFinType2_missing_value', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'BsmtQual_missing_value', 'CentralAir_Y', 'Electrical_FuseF', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Slab', 'Functional_Typ', 'Heating_GasA', 'Heating_Grav', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_2Story', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LotConfig_CulDSac', 'LotShape_Reg', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'PavedDrive_Y', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_Partial', 'SaleType_New', 'SaleType_WD'], 'best120_f_regression': ['1stFlrSF', '2ndFlrSF', '3SsnPorch', 'BedroomAbvGr', 'BsmtFinSF1', 'BsmtFullBath', 'BsmtUnfSF', 'EnclosedPorch', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'MasVnrArea', 'OpenPorchSF', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'haspool', 'has2ndfloor', 'hasgarage', 'hasbsmt', 'hasfireplace', 'BldgType_2fmCon', 'BldgType_Duplex', 'BldgType_Twnhs', 'BsmtCond_Gd', 'BsmtCond_Po', 'BsmtCond_TA', 'BsmtCond_missing_value', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtExposure_missing_value', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType1_missing_value', 'BsmtFinType2_BLQ', 'BsmtFinType2_Unf', 'BsmtFinType2_missing_value', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'BsmtQual_missing_value', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosA', 'Condition1_PosN', 'Condition2_Feedr', 'Condition2_PosN', 'Condition2_RRNn', 'Electrical_FuseF', 'Electrical_FuseP', 'Electrical_Mix', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Slab', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Typ', 'Heating_GasA', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LotConfig_CulDSac', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'MasVnrType_missing_value', 'PavedDrive_P', 'PavedDrive_Y', 'RoofMatl_WdShake', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_New', 'SaleType_WD', 'Street_Pave'], '#best145_f_regression': ['1stFlrSF', '2ndFlrSF', '3SsnPorch', 'BedroomAbvGr', 'BsmtFinSF1', 'BsmtFullBath', 'BsmtUnfSF', 'EnclosedPorch', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'LowQualFinSF', 'MasVnrArea', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'haspool', 'has2ndfloor', 'hasgarage', 'hasbsmt', 'hasfireplace', 'BldgType_2fmCon', 'BldgType_Duplex', 'BldgType_Twnhs', 'BsmtCond_Gd', 'BsmtCond_Po', 'BsmtCond_TA', 'BsmtCond_missing_value', 'BsmtExposure_Gd', 'BsmtExposure_Mn', 'BsmtExposure_No', 'BsmtExposure_missing_value', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType1_missing_value', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtFinType2_missing_value', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'BsmtQual_missing_value', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosA', 'Condition1_PosN', 'Condition1_RRAe', 'Condition2_Feedr', 'Condition2_Norm', 'Condition2_PosA', 'Condition2_PosN', 'Condition2_RRNn', 'Electrical_FuseF', 'Electrical_FuseP', 'Electrical_Mix', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_Gd', 'ExterCond_Po', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Slab', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Typ', 'Heating_GasA', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_Po', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LotConfig_CulDSac', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_IR3', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'MasVnrType_missing_value', 'MoSold_11', 'MoSold_4', 'MoSold_5', 'MoSold_9', 'PavedDrive_P', 'PavedDrive_Y', 'RoofMatl_WdShake', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Gambrel', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Family', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_ConLw', 'SaleType_New', 'SaleType_Oth', 'SaleType_WD', 'Street_Pave', 'YrSold_2007'], 'best15_mutual_info_regression': ['1stFlrSF', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'OverallQual', 'TotalBsmtSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'ExterQual_Gd', 'ExterQual_TA', 'KitchenQual_TA'], 'best35_mutual_info_regression': ['1stFlrSF', '2ndFlrSF', 'BsmtFinSF1', 'BsmtUnfSF', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'LotArea', 'LotFrontage', 'MasVnrArea', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'hasfireplace', 'BsmtFinType1_GLQ', 'BsmtQual_Gd', 'BsmtQual_TA', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'HeatingQC_TA', 'KitchenQual_Gd', 'KitchenQual_TA'], 'best80_mutual_info_regression': ['1stFlrSF', '2ndFlrSF', 'BedroomAbvGr', 'BsmtFinSF1', 'BsmtFullBath', 'BsmtUnfSF', 'EnclosedPorch', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'MasVnrArea', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'hasgarage', 'hasbsmt', 'hasfireplace', 'BldgType_Duplex', 'BsmtCond_missing_value', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtExposure_missing_value', 'BsmtFinType1_GLQ', 'BsmtFinType1_Rec', 'BsmtFinType1_missing_value', 'BsmtFinType2_missing_value', 'BsmtQual_Gd', 'BsmtQual_TA', 'BsmtQual_missing_value', 'CentralAir_Y', 'Condition2_Norm', 'Electrical_FuseF', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterQual_Fa', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Slab', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_2Story', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LotConfig_CulDSac', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'PavedDrive_Y', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_New', 'SaleType_WD', 'YrSold_2009'], 'best120_mutual_info_regression': ['1stFlrSF', '2ndFlrSF', 'BedroomAbvGr', 'BsmtFinSF1', 'BsmtFinSF2', 'BsmtFullBath', 'BsmtHalfBath', 'BsmtUnfSF', 'EnclosedPorch', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'LowQualFinSF', 'MasVnrArea', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'has2ndfloor', 'hasgarage', 'hasbsmt', 'hasfireplace', 'BldgType_2fmCon', 'BldgType_Duplex', 'BldgType_Twnhs', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtCond_missing_value', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtExposure_missing_value', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType1_missing_value', 'BsmtFinType2_GLQ', 'BsmtFinType2_missing_value', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'BsmtQual_missing_value', 'CentralAir_Y', 'Condition1_PosA', 'Condition1_PosN', 'Condition1_RRAe', 'Electrical_FuseF', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Slab', 'Functional_Min2', 'Functional_Typ', 'Heating_GasA', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'HouseStyle_SLvl', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandContour_Lvl', 'LandSlope_Mod', 'LotConfig_CulDSac', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'MasVnrType_missing_value', 'MoSold_2', 'MoSold_7', 'MoSold_8', 'PavedDrive_P', 'PavedDrive_Y', 'RoofMatl_WdShake', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_New', 'SaleType_WD', 'YrSold_2007', 'YrSold_2008', 'YrSold_2009'], 'best145_mutual_info_regression': ['1stFlrSF', '2ndFlrSF', 'BedroomAbvGr', 'BsmtFinSF1', 'BsmtFinSF2', 'BsmtFullBath', 'BsmtHalfBath', 'BsmtUnfSF', 'EnclosedPorch', 'Fireplaces', 'FullBath', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'LowQualFinSF', 'MasVnrArea', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'TotalBsmtSF', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'haspool', 'has2ndfloor', 'hasgarage', 'hasbsmt', 'hasfireplace', 'BldgType_2fmCon', 'BldgType_Duplex', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtCond_missing_value', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtExposure_missing_value', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType1_missing_value', 'BsmtFinType2_BLQ', 'BsmtFinType2_GLQ', 'BsmtFinType2_Unf', 'BsmtFinType2_missing_value', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'BsmtQual_missing_value', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosA', 'Condition1_PosN', 'Condition1_RRAe', 'Condition2_PosN', 'Condition2_RRAe', 'Condition2_RRAn', 'Condition2_RRNn', 'Electrical_FuseF', 'Electrical_FuseP', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Slab', 'Foundation_Stone', 'Functional_Maj2', 'Functional_Min2', 'Functional_Typ', 'Heating_GasA', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_Po', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'HouseStyle_SLvl', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandContour_Lvl', 'LandSlope_Mod', 'LotConfig_CulDSac', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_IR3', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'MasVnrType_missing_value', 'MoSold_2', 'MoSold_3', 'MoSold_4', 'MoSold_7', 'MoSold_8', 'MoSold_9', 'PavedDrive_P', 'PavedDrive_Y', 'RoofMatl_Membran', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShake', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_New', 'SaleType_WD', 'SaleType_missing_value', 'YrSold_2007', 'YrSold_2008', 'YrSold_2009'], 'median_from_ridge': ['BsmtHalfBath', 'Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'Total_Bathrooms', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Condition2_Feedr', 'Condition2_Norm', 'Electrical_FuseP', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotShape_IR2', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MasVnrType_None', 'MasVnrType_Stone', 'MoSold_12', 'MoSold_5', 'MoSold_6', 'MoSold_7', 'PavedDrive_P', 'PavedDrive_Y', 'RoofMatl_Membran', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Mansard', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_ConLI', 'SaleType_New', 'SaleType_Oth', 'SaleType_WD', 'Street_Pave', 'YrSold_2009'], 'median_from_lasso': ['BedroomAbvGr', 'BsmtFullBath', 'BsmtHalfBath', 'Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'TotRmsAbvGrd', 'YearBuilt', 'Total_Bathrooms', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Electrical_SBrkr', 'ExterCond_TA', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_None', 'MasVnrType_Stone', 'MoSold_12', 'MoSold_2', 'MoSold_5', 'MoSold_6', 'MoSold_7', 'MoSold_8', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofStyle_Gable', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_ConLD', 'SaleType_New', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2009'], 'median_from_elasticnet': ['BedroomAbvGr', 'BsmtFullBath', 'BsmtHalfBath', 'Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'TotRmsAbvGrd', 'Total_Bathrooms', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Electrical_SBrkr', 'ExterCond_TA', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'MoSold_12', 'MoSold_2', 'MoSold_5', 'MoSold_6', 'MoSold_7', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_ConLD', 'SaleType_New', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2009'], 'mean_from_ridge': ['Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtFinType2_BLQ', 'BsmtFinType2_Unf', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'ExterQual_Fa', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandSlope_Sev', 'LotConfig_CulDSac', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MasVnrType_Stone', 'MoSold_5', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_ConLD', 'SaleType_New', 'SaleType_WD', 'Street_Pave', 'YrSold_2009'], 'mean_from_lasso': ['Fireplaces', 'GarageCars', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'hasgarage', 'BldgType_Twnhs', 'BsmtExposure_Gd', 'BsmtFinType2_BLQ', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'ExterCond_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'HeatingQC_TA', 'HouseStyle_2.5Fin', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandSlope_Sev', 'LotConfig_CulDSac', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_Stone', 'PavedDrive_Y', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleType_ConLD', 'SaleType_New', 'Street_Pave', 'YrSold_2009'], 'mean_from_elasticnet': ['GarageCars', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'hasgarage', 'BldgType_Twnhs', 'BsmtExposure_Gd', 'BsmtFinType2_BLQ', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_TA', 'HouseStyle_2.5Fin', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandSlope_Sev', 'LotConfig_CulDSac', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_Stone', 'PavedDrive_Y', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleType_ConLD', 'SaleType_New', 'Street_Pave'], 'default_ridge': ['BsmtHalfBath', 'Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'Total_Bathrooms', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Condition2_Feedr', 'Condition2_Norm', 'Electrical_FuseP', 'Electrical_SBrkr', 'ExterCond_Fa', 'ExterCond_TA', 'ExterQual_Fa', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotShape_IR2', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MasVnrType_None', 'MasVnrType_Stone', 'MoSold_12', 'MoSold_5', 'MoSold_6', 'MoSold_7', 'PavedDrive_P', 'PavedDrive_Y', 'RoofMatl_Membran', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Mansard', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_ConLI', 'SaleType_New', 'SaleType_Oth', 'SaleType_WD', 'Street_Pave', 'YrSold_2009'], 'default_lasso': ['BedroomAbvGr', 'BsmtFullBath', 'BsmtHalfBath', 'Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'TotRmsAbvGrd', 'YearBuilt', 'Total_Bathrooms', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Electrical_SBrkr', 'ExterCond_TA', 'ExterQual_TA', 'Foundation_CBlock', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_None', 'MasVnrType_Stone', 'MoSold_12', 'MoSold_2', 'MoSold_5', 'MoSold_6', 'MoSold_7', 'MoSold_8', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofStyle_Gable', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_ConLD', 'SaleType_New', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2009'], 'default_elasticnet': ['BedroomAbvGr', 'BsmtFullBath', 'BsmtHalfBath', 'Fireplaces', 'GarageCars', 'HalfBath', 'KitchenAbvGr', 'OverallCond', 'OverallQual', 'TotRmsAbvGrd', 'Total_Bathrooms', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Electrical_SBrkr', 'ExterCond_TA', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_BrkFace', 'MasVnrType_None', 'MasVnrType_Stone', 'MoSold_12', 'MoSold_2', 'MoSold_5', 'MoSold_6', 'MoSold_7', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_ConLD', 'SaleType_New', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2009'], 'rfe': ['1stFlrSF', '3SsnPorch', 'BedroomAbvGr', 'BsmtFinSF2', 'BsmtFullBath', 'BsmtHalfBath', 'EnclosedPorch', 'Fireplaces', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'LowQualFinSF', 'MasVnrArea', 'MiscVal', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_Po', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_GLQ', 'BsmtFinType2_LwQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Condition1_RRNn', 'Condition2_Feedr', 'Condition2_Norm', 'Electrical_SBrkr', 'ExterCond_Gd', 'ExterCond_TA', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2.5Unf', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_None', 'MasVnrType_Stone', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Family', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_ConLI', 'SaleType_ConLw', 'SaleType_New', 'SaleType_Oth', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2008', 'YrSold_2009', 'YrSold_2010', '2ndFlrSF', 'BsmtFinSF1', 'BsmtUnfSF', 'FullBath', 'TotalBsmtSF', 'ExterCond_Fa'], 'all': ['TotalSF', 'Foundation_CBlock', 'RoofMatl_WdShngl', 'RoofStyle_Shed', 'BsmtCond_Gd', 'haspool', 'LandContour_HLS', 'OverallCond', 'OpenPorchSF', 'HouseStyle_SFoyer', 'BsmtHalfBath', 'BsmtQual_Gd', 'Condition2_Feedr', 'RoofStyle_Gambrel', 'TotRmsAbvGrd', 'HouseStyle_2.5Unf', 'Street_Pave', 'LotShape_IR3', 'HeatingQC_Fa', 'BldgType_2fmCon', 'Condition1_RRNn', 'BsmtUnfSF', 'RoofMatl_Membran', 'BedroomAbvGr', 'RoofStyle_Mansard', 'Total_sqr_footage', 'BsmtFinType2_LwQ', 'Total_porch_sf', 'Condition1_PosN', 'Heating_Grav', 'RoofStyle_Hip', '1stFlrSF', 'BsmtFinType2_BLQ', 'SaleType_ConLw', 'MoSold_7', 'ScreenPorch', 'BsmtCond_missing_value', 'SaleType_WD', 'ExterCond_Fa', 'YearBuilt', 'BldgType_TwnhsE', 'Condition1_PosA', 'MasVnrType_BrkFace', 'SaleType_missing_value', 'ExterQual_Fa', 'LotArea', 'YrSold_2010', 'MoSold_12', 'BsmtExposure_Gd', 'BldgType_Duplex', 'HeatingQC_Gd', 'BsmtExposure_Mn', 'Condition2_Norm', 'Foundation_Stone', 'hasbsmt', 'LandSlope_Mod', 'SaleType_ConLI', 'KitchenAbvGr', 'Heating_GasW', 'YrSold_2009', 'ExterCond_TA', 'hasfireplace', 'MoSold_5', 'SaleType_CWD', 'BsmtFinType2_missing_value', 'HouseStyle_1.5Unf', 'SaleType_Con', 'BsmtFinType1_Unf', 'HeatingQC_Po', 'MoSold_11', 'MasVnrType_None', 'LotConfig_CulDSac', 'KitchenQual_Gd', 'MoSold_4', 'SaleCondition_Normal', 'Condition2_RRNn', 'YrSold_2007', 'YearRemodAdd', 'BsmtQual_Fa', 'CentralAir_Y', 'HouseStyle_SLvl', 'Foundation_Wood', 'SaleCondition_AdjLand', 'YrSold_2008', 'RoofMatl_Metal', 'BsmtFinType2_Rec', '3SsnPorch', 'BsmtCond_Po', 'MoSold_10', 'MSZoning_FV', 'Utilities_missing_value', 'MSZoning_RH', 'SaleCondition_Family', 'Condition1_Norm', 'LotConfig_FR3', 'MasVnrArea', 'KitchenQual_Fa', 'BsmtFinType1_missing_value', 'Condition1_RRNe', 'Foundation_Slab', 'TotalBsmtSF', 'RoofMatl_Tar&Grv', '2ndFlrSF', 'BsmtQual_TA', 'Heating_OthW', 'BsmtQual_missing_value', 'Condition1_RRAn', 'BsmtFinType1_BLQ', 'WoodDeckSF', 'BsmtFinType1_GLQ', 'ExterCond_Po', 'LotConfig_FR2', 'ExterCond_Gd', 'LowQualFinSF', 'HouseStyle_2.5Fin', 'HeatingQC_TA', 'GarageCars', 'ExterQual_TA', 'MiscVal', 'RoofMatl_Roll', 'Total_Bathrooms', 'KitchenQual_TA', 'FullBath', 'SaleType_ConLD', 'BsmtExposure_missing_value', 'BldgType_Twnhs', 'BsmtExposure_No', 'Functional_Min1', 'MasVnrType_missing_value', 'LotFrontage', 'Condition2_RRAe', 'Heating_Wall', 'HouseStyle_1Story', 'MasVnrType_Stone', 'BsmtFinType1_Rec', 'BsmtFinType2_GLQ', 'HalfBath', 'BsmtFinType1_LwQ', 'LandContour_Lvl', 'LandSlope_Sev', 'BsmtFinType2_Unf', 'ExterQual_Gd', 'Condition2_RRAn', 'Functional_Maj2', 'LotShape_IR2', 'Foundation_PConc', 'Electrical_Mix', 'BsmtCond_TA', 'LandContour_Low', 'PavedDrive_Y', 'Electrical_FuseF', 'EnclosedPorch', 'MoSold_3', 'GarageArea', 'BsmtFinSF2', 'Functional_Mod', 'MSZoning_RM', 'SaleType_New', 'SaleType_Oth', 'PavedDrive_P', 'Functional_Typ', 'Functional_Sev', 'Condition2_PosA', 'LotConfig_Inside', 'Electrical_SBrkr', 'MoSold_9', 'MSZoning_RL', 'MoSold_2', 'SaleCondition_Alloca', 'BsmtFullBath', 'LotShape_Reg', 'Heating_GasA', 'Electrical_FuseP', 'SaleCondition_Partial', 'MoSold_6', 'Functional_Min2', 'Condition2_PosN', 'MoSold_8', 'HouseStyle_2Story', 'RoofMatl_WdShake', 'Utilities_NoSeWa', 'hasgarage', 'has2ndfloor', 'BsmtFinSF1', 'Condition1_RRAe', 'Fireplaces', 'RoofStyle_Gable', 'OverallQual', 'Condition1_Feedr', 'GrLivArea']}
-
 
 
 #%%
@@ -279,15 +305,13 @@ models = {
     'Stack1': stack1,
     'Stack2': stack2
 }
-
-#%%
 scores = []
 model_performance = []
 
 from sklearn.model_selection import cross_val_score
 # ! don't forget to set this to False if you want to run CV to select the best feature set
 skip = False
-k_cross = 5
+k_cross = 3
 for model_name in models:
     
     model = models[model_name]
@@ -302,7 +326,9 @@ for model_name in models:
             print("    using ",name, " n=",len(features_space[name]))
 
             scoring = 'neg_mean_absolute_error'
-            result = cross_validate(model, np.array(X_train[features_space[name]]), np.array(y),                            cv=k_cross,
+            result = cross_validate(model,
+                                    np.array(X_train[features_space[name]]), np.array(y),
+                                    cv=k_cross,
                                     scoring=scoring,
                                     return_train_score=True)
             score = result['test_score']

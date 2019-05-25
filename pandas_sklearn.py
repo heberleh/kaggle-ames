@@ -47,11 +47,11 @@ def select_from_model(df_X, df_y, model, threshold="median"):
     return df_X.columns[selector.get_support(indices=True)]    
 
 
-def rfe_cv(X_train, y, model, scoring='neg_mean_absolute_error', step=1, cv=KFold(n_splits=5), n_jobs = 1):
+def rfe_cv(X_train, y, model, scoring='neg_mean_absolute_error', step=1, cv=KFold(n_splits=5), n_jobs = -1):
     # if isinstance(model, Pipeline):        
     #     model = model.steps[1][1]
-    rfe = RFECV(model, scoring='neg_mean_absolute_error', step=1, cv=cv, n_jobs = 8)
-    rfe.fit(X_train, y)    
+    rfe = RFECV(model, scoring=scoring, step=step, cv=cv, n_jobs = n_jobs-1)
+    rfe.fit(X_train, y)
     print(rfe.ranking_)
     print(np.mean(rfe.ranking_), np.median(rfe.ranking_))
     return X_train.columns[rfe.get_support(indices=True)]

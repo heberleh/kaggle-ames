@@ -7,14 +7,7 @@ from xgboost import XGBRegressor
 from mlxtend.regressor import StackingCVRegressor
 from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
-
-class Mypipeline(Pipeline):
-    @property
-    def coef_(self):
-        return self._final_estimator.coef_
-    @property
-    def feature_importances_(self):
-        return self._final_estimator.feature_importances_ 
+from my_pipeline import Mypipeline
 
 random_state = 2019
 
@@ -37,12 +30,12 @@ elasticnet = Mypipeline([("scaler", RobustScaler()),
                                         cv=kfolds, l1_ratio=e_l1ratio))])
 
 svr = Mypipeline([("scaler", RobustScaler()),
-                ("model", SVR(C=20, epsilon=0.008, gamma=0.0003))])
+                ("model", SVR(C=20, epsilon=0.008, gamma=0.0003, kernel='linear'))])
 
 
 #%%
 grid_xgbr_params = {'colsample_bytree': 0.3, 'gamma': 0, 'learning_rate': 0.03, 
-'max_depth': 3, 'min_child_weight': 0, 'n_estimators': 1000, 'nthread': 7, 
+'max_depth': 3, 'min_child_weight': 0, 'n_estimators': 1000, 'nthread': 4, 
 'objective': 'reg:linear', 'reg_alpha': 0.01, 'scale_pos_weight': 1, 
 'seed': 27, 'subsample': 0.75} # -0.08109561292018139
 
@@ -51,7 +44,7 @@ original_xgbr_params = { 'learning_rate':0.01, 'n_estimators':4000,'max_depth':3
 xgbr = XGBRegressor(**grid_xgbr_params)
 
 #%%
-rf = RandomForestRegressor(n_estimators=1000, max_depth=3, random_state=random_state, n_jobs=8)
+rf = RandomForestRegressor(n_estimators=1000, max_depth=3, random_state=random_state, n_jobs=4)
 
 
 #%%
