@@ -226,38 +226,32 @@ from sklearn.feature_selection import f_regression, mutual_info_regression # for
 features_rfe_lasson_u_lgbm = ['1stFlrSF', '3SsnPorch', 'BedroomAbvGr', 'BsmtFinSF2', 'BsmtFullBath', 'BsmtHalfBath', 'EnclosedPorch', 'Fireplaces', 'GarageArea', 'GarageCars', 'GrLivArea', 'HalfBath', 'KitchenAbvGr', 'LotArea', 'LotFrontage', 'LowQualFinSF', 'MasVnrArea', 'MiscVal', 'OpenPorchSF', 'OverallCond', 'OverallQual', 'ScreenPorch', 'TotRmsAbvGrd', 'WoodDeckSF', 'YearBuilt', 'YearRemodAdd', 'TotalSF', 'Total_sqr_footage', 'Total_Bathrooms', 'Total_porch_sf', 'hasgarage', 'hasfireplace', 'BldgType_Twnhs', 'BldgType_TwnhsE', 'BsmtCond_Gd', 'BsmtCond_Po', 'BsmtCond_TA', 'BsmtExposure_Gd', 'BsmtExposure_No', 'BsmtFinType1_BLQ', 'BsmtFinType1_GLQ', 'BsmtFinType1_LwQ', 'BsmtFinType1_Rec', 'BsmtFinType1_Unf', 'BsmtFinType2_BLQ', 'BsmtFinType2_GLQ', 'BsmtFinType2_LwQ', 'BsmtFinType2_Rec', 'BsmtFinType2_Unf', 'BsmtQual_Fa', 'BsmtQual_Gd', 'BsmtQual_TA', 'CentralAir_Y', 'Condition1_Feedr', 'Condition1_Norm', 'Condition1_PosN', 'Condition1_RRAe', 'Condition1_RRAn', 'Condition1_RRNn', 'Condition2_Feedr', 'Condition2_Norm', 'Electrical_SBrkr', 'ExterCond_Gd', 'ExterCond_TA', 'ExterQual_Gd', 'ExterQual_TA', 'Foundation_PConc', 'Foundation_Stone', 'Foundation_Wood', 'Functional_Maj2', 'Functional_Min1', 'Functional_Min2', 'Functional_Mod', 'Functional_Sev', 'Functional_Typ', 'Heating_GasW', 'Heating_Grav', 'Heating_Wall', 'HeatingQC_Fa', 'HeatingQC_Gd', 'HeatingQC_TA', 'HouseStyle_1.5Unf', 'HouseStyle_1Story', 'HouseStyle_2.5Fin', 'HouseStyle_2.5Unf', 'HouseStyle_2Story', 'HouseStyle_SFoyer', 'KitchenQual_Fa', 'KitchenQual_Gd', 'KitchenQual_TA', 'LandContour_HLS', 'LandContour_Low', 'LandSlope_Mod', 'LandSlope_Sev', 'LotConfig_CulDSac', 'LotConfig_FR2', 'LotConfig_Inside', 'LotShape_IR2', 'LotShape_Reg', 'MSZoning_FV', 'MSZoning_RH', 'MSZoning_RL', 'MSZoning_RM', 'MasVnrType_None', 'MasVnrType_Stone', 'PavedDrive_Y', 'RoofMatl_Tar&Grv', 'RoofMatl_WdShngl', 'RoofStyle_Gable', 'RoofStyle_Hip', 'SaleCondition_AdjLand', 'SaleCondition_Alloca', 'SaleCondition_Family', 'SaleCondition_Normal', 'SaleCondition_Partial', 'SaleType_CWD', 'SaleType_Con', 'SaleType_ConLD', 'SaleType_ConLI', 'SaleType_ConLw', 'SaleType_New', 'SaleType_Oth', 'SaleType_WD', 'Street_Pave', 'YrSold_2007', 'YrSold_2008', 'YrSold_2009', 'YrSold_2010', '2ndFlrSF', 'BsmtFinSF1', 'BsmtUnfSF', 'FullBath', 'TotalBsmtSF', 'ExterCond_Fa']
 #--------------------------------
 
-
-# WORSE FEATURES 
-# mean_from_ridge, default_ridge, mean_from_elasticnet, mean_from_lasso, median_from_ridge
-
-#Method	Model name	Model name	N	Median Test	Median Train	Test
-
-# Worse methods
-# mean_from_elasticnet
-# mean_from_lasso
-# mean_from_ridge
-# default_ridge
-# median_from_ridge
-# median_from_elasticnet
-# default_elasticnet
-# default_lasso
-# median_from_lasso
-# best15_mutual_info_regression
-# best15_f_regression
-
-
 features_space = {
 # f_regression
+    'best15_f_regression': select_k_best(X_train, y, f_regression, 15).tolist(),
     'best35_f_regression': select_k_best(X_train, y, f_regression, 35).tolist(),
     'best25_f_regression': select_k_best(X_train, y, f_regression, 80).tolist(),
     'best120_f_regression': select_k_best(X_train, y, f_regression, 120).tolist(),
     '#best145_f_regression': select_k_best(X_train, y, f_regression, 145).tolist(),
 
-    #'best15_mutual_info_regression': select_k_best(X_train, y, mutual_info_regression, 15).tolist(),
+    'best15_mutual_info_regression': select_k_best(X_train, y, mutual_info_regression, 15).tolist(),
     'best35_mutual_info_regression': select_k_best(X_train, y, mutual_info_regression, 35).tolist(),
     'best80_mutual_info_regression': select_k_best(X_train, y, mutual_info_regression, 80).tolist(),
     'best120_mutual_info_regression': select_k_best(X_train, y, mutual_info_regression, 120).tolist(),
     'best145_mutual_info_regression': select_k_best(X_train, y, mutual_info_regression, 145).tolist(),
+
+    #'median_from_random_forest': select_from_model(X_train, y, rf, threshold='median').tolist(),
+    #'median_from_ridge': select_from_model(X_train, y, ridge, threshold='median').tolist(),
+    'median_from_lasso': select_from_model(X_train, y, lasso, threshold='median').tolist(),
+    #'median_from_elasticnet': select_from_model(X_train, y, elasticnet, threshold='median').tolist(),
+
+    #'mean_from_ridge': select_from_model(X_train, y, ridge, threshold='mean').tolist(),
+    'mean_from_lasso': select_from_model(X_train, y, lasso, threshold='mean').tolist(),
+    #'mean_from_elasticnet': select_from_model(X_train, y, elasticnet, threshold='mean').tolist(),
+
+    #'default_ridge': select_from_model(X_train, y, ridge).tolist(),
+    'default_lasso': select_from_model(X_train, y, lasso).tolist(),
+    #'default_elasticnet': select_from_model(X_train, y, elasticnet).tolist(),
 
     "rfe": features_rfe_lasson_u_lgbm,
     "all": list(set(X_train.columns))
@@ -278,7 +272,7 @@ features_space = {
 models = {
     'Ridge': ridge,
     'Lasso': lasso,
-    #'SVR': svr, #worse...
+    'SVR': svr,
     'Elastic Net': elasticnet,
     'XGB': xgbr,
     'LightGBM': lightgbm,

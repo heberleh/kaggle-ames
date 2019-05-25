@@ -64,7 +64,7 @@ gridcv_lgbm_params = {'bagging_fraction': 0.75, 'bagging_freq': 3,
 
 original_lgbm_params = {'objective':'regression','num_leaves':4,'learning_rate':0.01,'n_estimators':3000,'max_bin':200,'bagging_fraction':0.75,'bagging_freq':5,'bagging_seed':7,'feature_fraction':0.2,'feature_fraction_seed':7,'verbose':-1}
 
-lightgbm = LGBMRegressor(**gridcv_lgbm_params)  
+lightgbm = LGBMRegressor(**original_lgbm_params)  
 
 stack1 = StackingCVRegressor(regressors=(ridge, lasso, elasticnet,
                                             xgbr, lightgbm),
