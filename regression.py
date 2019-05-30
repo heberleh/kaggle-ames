@@ -1,5 +1,5 @@
 from sklearn.linear_model import LassoCV, RidgeCV, ElasticNetCV
-from sklearn.svm import SVR
+from sklearn.svm import SVR, LinearSVR
 from sklearn.preprocessing import RobustScaler
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.model_selection import KFold
@@ -16,7 +16,7 @@ alphas2 = [5e-05, 0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008
 e_alphas = [0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007]
 e_l1ratio = [0.8, 0.85, 0.9, 0.95, 0.99, 1]
 
-kfolds = KFold(n_splits=4, shuffle=True, random_state=2019)
+kfolds = KFold(n_splits=3, shuffle=True, random_state=2019)
 
 ridge = Mypipeline([("scaler", RobustScaler()),
                         ("model", RidgeCV(alphas=alphas_alt, cv=kfolds, scoring='neg_mean_absolute_error'))])
@@ -29,8 +29,9 @@ elasticnet = Mypipeline([("scaler", RobustScaler()),
                         ("model", ElasticNetCV(max_iter=1e7, alphas=e_alphas,
                                         cv=kfolds, l1_ratio=e_l1ratio))])
 
+# from grid_CV {'model__C': 1.0, 'model__epsilon': 0.01, 'model__tol': 1e-05}
 svr = Mypipeline([("scaler", RobustScaler()),
-                ("model", SVR(C=20, epsilon=0.008, gamma=0.0003, kernel='linear'))])
+                ("model", LinearSVR(C=1.0, epsilon=0.01, tol=1e-05))])
 
 
 #%%

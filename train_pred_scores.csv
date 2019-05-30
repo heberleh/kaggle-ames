@@ -1,10 +1,9 @@
 ,Model name,N features,F Sel.,Error
-6,Stack1,145,best145_mutual_info_regression,7721.644091863857
-7,Stack2,145,best145_mutual_info_regression,7882.894558041842
-4,XGB,190,all,8022.928698881173
-8,Voting,0,combinations,9660.30490998487
-3,Elastic Net,145,#best145_f_regression,13014.784377514381
-1,Lasso,145,#best145_f_regression,13039.904677459534
-0,Ridge,134,rfe,13117.797567677315
-2,SVR,35,best35_mutual_info_regression,13888.631758863314
-5,LightGBM,145,#best145_f_regression,22493.707307799377
+5,Stack1,204,all,7329.169410150894
+6,Stack2,204,all,7545.173525377231
+3,XGB,204,all,7805.646776406038
+7,Voting,0,combinations,7851.080932784642
+4,LightGBM,204,all,10750.877229080936
+0,Ridge,204,all,12720.943758573385
+2,Elastic Net,204,all,13111.061728395061
+1,Lasso,204,all,13182.432098765432
